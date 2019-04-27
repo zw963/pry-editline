@@ -1,20 +1,14 @@
-module PryEditline
+require 'pry/input_completer'
 
-  def self.editor
+class PryEditline
+  def initialize(input, pry = nil)
+  end
+
+  def editor
     if defined?(Pry)
       Pry.editor
     else
       ENV.values_at('VISUAL', 'EDITOR').compact.first || 'vi'
-    end
-  end
-
-  def self.edit(file)
-    if defined?(Pry::Editor.invoke_editor)
-      Pry::Editor.invoke_editor(file, 1, true)
-    elsif editor.is_a?(Proc)
-      system(editor.call(file, 1, true))
-    else
-      system("#{editor} #{file}")
     end
   end
 
@@ -59,13 +53,13 @@ EOF
   def self.completion_proc
     lambda do |s|
       if Readline.respond_to?(:point) && Readline.respond_to?(:line_buffer) &&
-        Readline.point == 0 && Readline.line_buffer =~ /  $/
-      then
+          Readline.point == 0 && Readline.line_buffer =~ /  $/
+        then
         require 'tempfile'
         Tempfile.open(['readline-','.rb']) do |f|
           f.puts(Readline.line_buffer[0..-3])
           f.close
-          edit(f.path)
+          system("#{editor} #{f.path}")
           File.read(f.path).chomp
         end
       else
@@ -74,24 +68,21 @@ EOF
     end
   end
 
-end
-
-if defined?(Pry::InputCompleter)
-  PryEditline.hijack_inputrc
-  # Pry 0.9.10 way:
-  completer = Pry::InputCompleter
-  # Pry >0.9.10 way:
-  completer = Pry.config.completer if Pry.config.respond_to? :completer
-  class << completer
-    unless method_defined?(:build_completion_proc_without_edit)
-      alias build_completion_proc_without_edit build_completion_proc
-
-      def build_completion_proc(*args)
-        PryEditline.completion_proc(&build_completion_proc_without_edit(*args))
-      end
+  def call(s, options = {})
+    require 'tempfile'
+    Tempfile.open(['readline-','.rb']) do |f|
+      f.puts(Readline.line_buffer[0..-3])
+      f.close
+      system("#{editor} #{f.path}")
+      File.read(f.path).chomp
     end
   end
-elsif defined?(IRB) && defined?(Readline)
-  PryEditline.hijack_inputrc
-  Readline.completion_proc = PryEditline.completion_proc(&Readline.completion_proc)
 end
+
+def press_ctrl_x_ctrl_e
+  # How to decide current Ctrl-xCtrl-e is pressed use Readline?
+  true
+end
+
+PryEditline.hijack_inputrc
+Pry.config.completer = PryEditline if press_ctrl_x_ctrl_e
